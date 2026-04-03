@@ -1,0 +1,50 @@
+# OMEGA C2 Framework - Git Ignore List
+
+# --- Binaries & Build Artifacts ---
+bin/
+*.exe
+*.o
+*.res
+*.obj
+*.pdb
+*.ilk
+*.static.a
+*.dll
+
+# --- Sensitive Configuration & Secrets ---
+# Disarankan menggunakan config.h.template dan mengabaikan config.h asli
+common/config.h
+gist_payload.json
+
+# --- SSL Certificates & Private Keys ---
+cert/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# --- Agent Data & Operation Logs ---
+# Semua hasil operasi C2 harus tetap lokal
+bin/scans/
+bin/screenshots/
+bin/downloads/
+bin/logs/
+*.bmp
+*.jpg
+*.jpeg
+*.png
+*.json
+*.log
+*.txt
+
+# --- IDE & System Files ---
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+Thumbs.db
+Desktop.ini
+.DS_Store

