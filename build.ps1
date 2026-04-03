@@ -10,7 +10,7 @@ Write-Host "[*] Compiling OMEGA-C2 Modular Framework" -ForegroundColor Cyan
 
 $cpp_flags = "-std=c++17 -Wall -Wextra -static -static-libgcc -static-libstdc++ -Os -s -ffunction-sections -fdata-sections -Wl,--gc-sections"
 $client_cpp_flags = "-std=c++17 -Wall -Wextra -static -static-libgcc -static-libstdc++ -mwindows -Os -s -ffunction-sections -fdata-sections -Wl,--gc-sections"
-$libs = "-Wl,-Bstatic -lssl -lcrypto -Wl,-Bdynamic -lws2_32 -lgdi32 -lgdiplus -lole32 -lcrypt32 -lbcrypt -lwininet -lpsapi"
+$libs = "-Wl,-Bstatic -lssl -lcrypto -Wl,-Bdynamic -lws2_32 -lgdi32 -lgdiplus -lole32 -lcrypt32 -lbcrypt -lwininet -lpsapi -lshell32 -lshlwapi"
 
 $compiler = "C:\msys64\ucrt64\bin\g++.exe"
 if (!(Test-Path $compiler)) { $compiler = "g++" }

