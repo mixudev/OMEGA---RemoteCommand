@@ -50,22 +50,19 @@ std::string PrettyPrintJson(const std::string& input) {
     if (input.empty()) return "";
     std::string out;
     int indent = 0;
-    bool in_q = false;
+    bool in_str = false;
     for (size_t i = 0; i < input.length(); i++) {
         char c = input[i];
         if (c == '\"' && (i == 0 || input[i-1] != '\\')) {
-            in_q = !in_q;
+            in_str = !in_str;
             out += c;
-        } else if (!in_q) {
+        } else if (!in_str) {
             if (c == '{' || c == '[') {
                 out += c;
                 out += "\n";
                 indent += 2;
                 out += std::string(indent, ' ');
             } else if (c == '}' || c == ']') {
-                if (!out.empty() && out.back() == ' ') {
-                    while (!out.empty() && out.back() == ' ') out.pop_back();
-                }
                 out += "\n";
                 if (indent >= 2) indent -= 2;
                 out += std::string(indent, ' ');
@@ -76,9 +73,7 @@ std::string PrettyPrintJson(const std::string& input) {
                 out += std::string(indent, ' ');
             } else if (c == ':') {
                 out += ": ";
-            } else if (c == '\n' || c == '\r') {
-                // Skip existing newlines to avoid double spacing
-            } else {
+            } else if (!isspace(c)) {
                 out += c;
             }
         } else {
@@ -234,13 +229,7 @@ void CommandCenter() {
             std::string res = SendIPCRequest("KILL " + std::to_string(target_id));
             std::cout << SUCCESS_TAG << " Sinyal dikirim: " << res << std::endl;
         } else if (input.substr(0, 9) == "interact ") {
-            int target_id = std::stoi(input.substr(9));
-            std::string res = SendIPCRequest("LIST");
-            if (res.find(std::to_string(target_id) + "|") != std::string::npos) {
-                InteractLoop(target_id);
-            } else {
-                std::cout << ERROR_TAG << "Sesi " << target_id << " tidak ditemukan atau sudah mati." << std::endl;
-            }
+            InteractLoop(std::stoi(input.substr(9)));
         } else if (input == "exit" || input == "shutdown") {
             if (input == "exit") {
                 if (is_master_process) { LaunchDaemon(); }
@@ -280,10 +269,6 @@ void InteractLoop(int session_id) {
     
     // FETCH INITIAL CWD
     std::string initResp = SendIPCRequest("EXEC " + std::to_string(session_id) + " cd .");
-    if (initResp == "ERR_ID" || initResp == "ERR_CONN") {
-        std::cout << ERROR_TAG << "Sesi " << session_id << " terputus atau tidak valid." << std::endl;
-        return;
-    }
     size_t initSep = initResp.find("|||");
     if (initSep != std::string::npos) {
         agentCwd = initResp.substr(initSep + 3);
@@ -403,17 +388,13 @@ void InteractLoop(int session_id) {
         if (cmd.substr(0, 5) == "stop ") {
             std::string target = cmd.substr(5);
             std::string response = SendIPCRequest("EXEC " + std::to_string(session_id) + " stop " + target);
-            if (response.substr(0, 2) == "OK") std::cout << SUCCESS_TAG << "Proses dihentikan." << std::endl;
+            if (response == "OK") std::cout << SUCCESS_TAG << "Proses dihentikan." << std::endl;
             else std::cout << ERROR_TAG << "Gagal: " << response << std::endl;
             continue;
         }
 
         std::string request = "EXEC " + std::to_string(session_id) + " " + cmd;
         std::string response = SendIPCRequest(request);
-        if (response == "ERR_ID" || response == "ERR_CONN") {
-            std::cout << "\n" << ERROR_TAG << RED << BOLD << "[!] Sesi terputus atau ID tidak valid. Kembali ke menu utama." << RESET << std::endl;
-            break;
-        }
         size_t sep = response.find("|||");
         std::string output = (sep != std::string::npos) ? response.substr(0, sep) : response;
         std::string cwd = (sep != std::string::npos) ? response.substr(sep + 3) : "";
@@ -421,11 +402,7 @@ void InteractLoop(int session_id) {
         if (cmd == "tasks" || cmd == "drives") {
             SaveAgentResult(session_id, cmd, output);
         } else {
-            if (output.find("ERR_EXEC") != std::string::npos) {
-                std::cout << ERROR_TAG << RED << BOLD << "Perintah tidak dikenali atau gagal dijalankan. " << RESET << YELLOW << "Ketik 'help' untuk daftar perintah!" << RESET << std::endl;
-            } else if (!output.empty()) {
-                std::cout << output << std::endl;
-            }
+            if (!output.empty()) std::cout << output << std::endl;
         }
         if (!cwd.empty() && cwd != "TERMINATED") agentCwd = cwd;
         if (cwd == "TERMINATED") break;

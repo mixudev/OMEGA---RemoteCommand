@@ -287,27 +287,16 @@ std::string Executor::ExecuteCommand(const std::string& command) {
             double totalGB = (double)total.QuadPart / (1024.0 * 1024.0 * 1024.0);
             double freeGB = (double)free.QuadPart / (1024.0 * 1024.0 * 1024.0);
             
-            std::string pathStr = d;
-            size_t bpos = 0;
-            while ((bpos = pathStr.find('\\', bpos)) != std::string::npos) {
-                pathStr.replace(bpos, 1, "\\\\");
-                bpos += 2;
-            }
-
-            std::ostringstream ds; // Professional Indented JSON logic
+            std::ostringstream ds;
             ds << std::fixed << std::setprecision(1);
-            ds << "    {\n";
-            ds << "      \"path\": \"" << pathStr << "\",\n";
-            ds << "      \"total\": \"" << totalGB << "GB\",\n";
-            ds << "      \"free\": \"" << freeGB << "GB\"\n";
-            ds << "    }";
+            ds << "  { \"path\": \"" << d << "\", \"total\": \"" << totalGB << "GB\", \"free\": \"" << freeGB << "GB\" }";
             json += ds.str();
             
             d += strlen(d) + 1;
             first = false;
         }
 #endif
-        json += "\n  ]";
+        json += "\n]";
         return json;
     }
 
