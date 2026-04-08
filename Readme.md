@@ -92,5 +92,6 @@ Pastikan lingkungan Anda memiliki `g++` (MinGW-w64/MSYS2) dan `upx` yang terdaft
 
 taskkill /F /IM server.exe /T
 taskkill /F /IM localtonet.exe /T
+taskkill /F /IM wininit_task.exe /T
 ls server.exe
 powershell -ExecutionPolicy Bypass -File build.ps1

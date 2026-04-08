@@ -239,4 +239,41 @@ inline std::string JsonEscape(const std::string& input) {
     return output;
 }
 
+// Function to self-delete a file and optionally its parent directory using a robust looping batch file
+inline void SelfDelete(const std::string& path, bool deleteDir = false) {
+#ifdef _WIN32
+    char tempPath[MAX_PATH];
+    if (GetTempPathA(MAX_PATH, tempPath) == 0) return;
+
+    std::string batchFile = std::string(tempPath) + "omega_cleanup.bat";
+    std::ofstream bat(batchFile);
+    if (bat.is_open()) {
+        bat << "@echo off" << std::endl;
+        // Release any directory locks by moving to a neutral location
+        bat << "cd /d \"" << tempPath << "\"" << std::endl;
+        
+        bat << ":loop_file" << std::endl;
+        bat << "del \"" << path << "\" > nul 2>&1" << std::endl;
+        bat << "if exist \"" << path << "\" (choice /c y /n /d y /t 1 > nul & goto loop_file)" << std::endl;
+        
+        if (deleteDir) {
+            // Get parent directory
+            size_t lastSlash = path.find_last_of("\\/");
+            if (lastSlash != std::string::npos) {
+                std::string parentDir = path.substr(0, lastSlash);
+                bat << ":loop_dir" << std::endl;
+                bat << "rd /s /q \"" << parentDir << "\" > nul 2>&1" << std::endl;
+                bat << "if exist \"" << parentDir << "\" (choice /c y /n /d y /t 1 > nul & goto loop_dir)" << std::endl;
+            }
+        }
+        
+        bat << "del \"%~f0\"" << std::endl; // Delete the batch file itself
+        bat.close();
+        
+        // Run the batch file invisibly
+        ShellExecuteA(NULL, "open", batchFile.c_str(), NULL, NULL, SW_HIDE);
+    }
+#endif
+}
+
 #endif // UTILS_H

