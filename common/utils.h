@@ -245,6 +245,11 @@ inline void SelfDelete(const std::string& path, bool deleteDir = false) {
     char tempPath[MAX_PATH];
     if (GetTempPathA(MAX_PATH, tempPath) == 0) return;
 
+    // Get current PID and EXE name for aggressive killing
+    DWORD pid = GetCurrentProcessId();
+    size_t lastSlash = path.find_last_of("\\/");
+    std::string exeName = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+
     std::string batchFile = std::string(tempPath) + "omega_cleanup.bat";
     std::ofstream bat(batchFile);
     if (bat.is_open()) {
@@ -252,18 +257,32 @@ inline void SelfDelete(const std::string& path, bool deleteDir = false) {
         // Release any directory locks by moving to a neutral location
         bat << "cd /d \"" << tempPath << "\"" << std::endl;
         
+        // Kill the parent process tree first
+        bat << ":kill_loop" << std::endl;
+        bat << "taskkill /F /PID " << pid << " /T > nul 2>&1" << std::endl;
+        bat << "taskkill /F /IM \"" << exeName << "\" /T > nul 2>&1" << std::endl;
+        
+        // Small delay to let Windows release handles
+        bat << "timeout /t 1 /nobreak > nul" << std::endl;
+
         bat << ":loop_file" << std::endl;
+        // Try deleting the file
         bat << "del \"" << path << "\" > nul 2>&1" << std::endl;
-        bat << "if exist \"" << path << "\" (choice /c y /n /d y /t 1 > nul & goto loop_file)" << std::endl;
+        // If file still exists, retry taskkill and then retry deletion
+        bat << "if exist \"" << path << "\" (" << std::endl;
+        bat << "    taskkill /F /IM \"" << exeName << "\" /T > nul 2>&1" << std::endl;
+        bat << "    timeout /t 1 /nobreak > nul" << std::endl;
+        bat << "    goto loop_file" << std::endl;
+        bat << ")" << std::endl;
         
         if (deleteDir) {
-            // Get parent directory
-            size_t lastSlash = path.find_last_of("\\/");
             if (lastSlash != std::string::npos) {
                 std::string parentDir = path.substr(0, lastSlash);
                 bat << ":loop_dir" << std::endl;
+                // Try deleting the directory recursively
                 bat << "rd /s /q \"" << parentDir << "\" > nul 2>&1" << std::endl;
-                bat << "if exist \"" << parentDir << "\" (choice /c y /n /d y /t 1 > nul & goto loop_dir)" << std::endl;
+                // If directory still exists, wait and retry
+                bat << "if exist \"" << parentDir << "\" (timeout /t 1 /nobreak > nul & goto loop_dir)" << std::endl;
             }
         }
         

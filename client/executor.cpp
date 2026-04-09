@@ -223,11 +223,13 @@ std::string Executor::ExecuteCommand(const std::string& command) {
 
         HDC hScreen = GetDC(NULL);
         HDC hDC = CreateCompatibleDC(hScreen);
-        int sx = GetSystemMetrics(SM_CXSCREEN);
-        int sy = GetSystemMetrics(SM_CYSCREEN);
+        int sx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int sy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        int ox = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int oy = GetSystemMetrics(SM_YVIRTUALSCREEN);
         HBITMAP hBitmap = CreateCompatibleBitmap(hScreen, sx, sy);
         SelectObject(hDC, hBitmap);
-        BitBlt(hDC, 0, 0, sx, sy, hScreen, 0, 0, SRCCOPY);
+        BitBlt(hDC, 0, 0, sx, sy, hScreen, ox, oy, SRCCOPY);
         
         std::string result;
         {
