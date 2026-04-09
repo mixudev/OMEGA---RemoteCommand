@@ -111,22 +111,36 @@ SSL* SSLClient::GetSSL() const {
 
 void SSLClient::Disconnect() {
     if (ssl) {
-        // Properly shutdown SSL connection
+        // Properly shutdown SSL connection (might block!)
         int shutdown_result = SSL_shutdown(ssl);
         if (shutdown_result == 0) {
-            // If shutdown returned 0, try again
             SSL_shutdown(ssl);
         }
         SSL_free(ssl);
         ssl = nullptr;
     }
     if (clientSocket != INVALID_SOCKET) {
-        // Disable linger to force immediate close
+        closesocket(clientSocket);
+        clientSocket = INVALID_SOCKET;
+    }
+    if (ctx) {
+        SSL_CTX_free(ctx);
+        ctx = nullptr;
+    }
+}
+
+void SSLClient::ForceDisconnect() {
+    // ABORTIVE DISCONNECT: No handshake, just kill handles
+    if (ssl) {
+        SSL_free(ssl); // Free without shutdown handshake
+        ssl = nullptr;
+    }
+    if (clientSocket != INVALID_SOCKET) {
+        // Force reset (Linger 0)
         struct linger lin;
         lin.l_onoff = 1;
         lin.l_linger = 0;
         setsockopt(clientSocket, SOL_SOCKET, SO_LINGER, (const char*)&lin, sizeof(lin));
-        
         closesocket(clientSocket);
         clientSocket = INVALID_SOCKET;
     }

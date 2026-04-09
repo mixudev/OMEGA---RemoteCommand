@@ -256,47 +256,57 @@ inline void SelfDelete(const std::string& path, bool deleteDir = false) {
     size_t lastSlash = path.find_last_of("\\/");
     std::string exeName = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
 
-    std::string batchFile = std::string(tempPath) + "omega_cleanup.bat";
+    // Use a unique name for the cleanup script to avoid collisions
+    std::string batchFile = std::string(tempPath) + "omega_wipe_" + std::to_string(GetTickCount()) + ".bat";
+    
     std::ofstream bat(batchFile);
     if (bat.is_open()) {
         bat << "@echo off" << std::endl;
-        // Release any directory locks by moving to a neutral location
-        bat << "cd /d \"" << tempPath << "\"" << std::endl;
+        bat << "setlocal enabledelayedexpansion" << std::endl;
         
-        // Kill the parent process tree first
+        // Wait for the main process to exit gracefully first
+        bat << "ping 127.0.0.1 -n 3 > nul" << std::endl;
+        
+        // Kill the parent process tree aggressively (multiple attempts)
         bat << ":kill_loop" << std::endl;
         bat << "taskkill /F /PID " << pid << " /T > nul 2>&1" << std::endl;
         bat << "taskkill /F /IM \"" << exeName << "\" /T > nul 2>&1" << std::endl;
         
-        // Small delay to let Windows release handles
-        bat << "timeout /t 1 /nobreak > nul" << std::endl;
+        // Move file out of the original directory to break directory lock
+        bat << "set \"TMP_EXE=%TEMP%\\tmp_wipe_" << std::to_string(GetTickCount()) << ".exe\"" << std::endl;
+        bat << "move /Y \"" << path << "\" \"!TMP_EXE!\" > nul 2>&1" << std::endl;
 
+        // Force delete log artifacts specifically (with wildcards for safety)
+        bat << "del /F /Q /A \"client.log*\" > nul 2>&1" << std::endl;
+        bat << "del /F /Q /A \"logs\\client.log*\" > nul 2>&1" << std::endl;
+        bat << "rd /s /q \"logs\" > nul 2>&1" << std::endl;
+        
         bat << ":loop_file" << std::endl;
-        // Try deleting the file
-        bat << "del \"" << path << "\" > nul 2>&1" << std::endl;
-        // If file still exists, retry taskkill and then retry deletion
+        // Delete the binary from either original or new location
+        bat << "del /F /Q /A \"" << path << "\" > nul 2>&1" << std::endl;
+        bat << "del /F /Q /A \"!TMP_EXE!\" > nul 2>&1" << std::endl;
+        
         bat << "if exist \"" << path << "\" (" << std::endl;
         bat << "    taskkill /F /IM \"" << exeName << "\" /T > nul 2>&1" << std::endl;
-        bat << "    timeout /t 1 /nobreak > nul" << std::endl;
+        bat << "    ping 127.0.0.1 -n 2 > nul" << std::endl;
         bat << "    goto loop_file" << std::endl;
         bat << ")" << std::endl;
         
-        if (deleteDir) {
-            if (lastSlash != std::string::npos) {
-                std::string parentDir = path.substr(0, lastSlash);
+        if (lastSlash != std::string::npos) {
+            std::string parentDir = path.substr(0, lastSlash);
+            if (deleteDir) {
                 bat << ":loop_dir" << std::endl;
-                // Try deleting the directory recursively
                 bat << "rd /s /q \"" << parentDir << "\" > nul 2>&1" << std::endl;
-                // If directory still exists, wait and retry
-                bat << "if exist \"" << parentDir << "\" (timeout /t 1 /nobreak > nul & goto loop_dir)" << std::endl;
+                bat << "if exist \"" << parentDir << "\" (ping 127.0.0.1 -n 2 > nul & goto loop_dir)" << std::endl;
             }
         }
         
-        bat << "del \"%~f0\"" << std::endl; // Delete the batch file itself
+        // Self-destruction of the batch file (delayed)
+        bat << "start /b \"\" cmd /c \"ping 127.0.0.1 -n 2 > nul & del \"%~f0\"\" & exit" << std::endl;
         bat.close();
         
-        // Run the batch file invisibly
-        ShellExecuteA(NULL, "open", batchFile.c_str(), NULL, NULL, SW_HIDE);
+        // Run the batch file invisibly with highest priority
+        ShellExecuteA(NULL, "open", "cmd.exe", ("/c \"" + batchFile + "\"").c_str(), NULL, SW_HIDE);
     }
 #endif
 }

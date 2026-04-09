@@ -14,6 +14,7 @@ public:
     bool Connect();
     SSL* GetSSL() const;
     void Disconnect();
+    void ForceDisconnect(); // Non-blocking immediate closure
 
 private:
     std::string host;

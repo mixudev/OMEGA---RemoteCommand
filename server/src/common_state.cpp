@@ -6,6 +6,7 @@
 
 // Inisialisasi Global State
 std::string global_public_url = "None";
+DWORD global_tunnel_pid = 0;
 bool global_gist_success = false;
 int global_server_port = SERVER_PORT;
 std::mutex session_mutex;

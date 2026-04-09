@@ -33,6 +33,7 @@ struct AgentSession {
 
 // Global State
 extern std::string global_public_url;
+extern DWORD global_tunnel_pid;
 extern bool global_gist_success;
 extern int global_server_port;
 extern std::mutex session_mutex;

