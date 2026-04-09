@@ -17,6 +17,7 @@
 #define INFO_TAG    "\033[38;5;33m\033[1m[*]\033[0m "
 #define SUCCESS_TAG "\033[38;5;46m\033[1m[+]\033[0m "
 #define ERROR_TAG   "\033[38;5;196m\033[1m[-]\033[0m "
+#define WARNING_TAG "\033[38;5;226m\033[1m[!]\033[0m "
 #define PROMPT_TAG  "\033[38;5;201m OMEGA \033[0m\033[38;5;87m» \033[38;5;244mTerminal \033[38;5;87m» \033[0m"
 
 // Struktur untuk menyimpan identitas Sesi Target

